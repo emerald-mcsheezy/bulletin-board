@@ -239,16 +239,29 @@ function SectionHeader({title,sub}) {
 
 // ── SPLASH ────────────────────────────────────────────────────────────────────
 function Splash({onDone}) {
+  const isReturning = localStorage.getItem("bb_visited");
+  const [step, setStep] = useState(0);
+
   useEffect(() => {
-    const timer = setTimeout(() => onDone(), 2500);
-    return () => clearTimeout(timer);
+    setTimeout(() => setStep(1), 300);
+    setTimeout(() => setStep(2), 800);
+    setTimeout(() => setStep(3), 1300);
+    if(isReturning) {
+      const timer = setTimeout(() => onDone(), 2500);
+      return () => clearTimeout(timer);
+    }
   }, []);
 
+  function handleGetStarted() {
+    localStorage.setItem("bb_visited", "true");
+    onDone();
+  }
+
   return (
-    <div style={{minHeight:"100vh",background:`linear-gradient(160deg,#064e3b 0%,#065f46 40%,#047857 100%)`,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"60px 32px 48px",position:"relative",overflow:"hidden"}}>
+    <div style={{minHeight:"100vh",background:`linear-gradient(160deg,#064e3b 0%,#065f46 40%,#047857 100%)`,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"space-between",padding:"60px 32px 48px",position:"relative",overflow:"hidden"}}>
       <div style={{position:"absolute",width:320,height:320,borderRadius:"50%",background:"#fff",opacity:0.12,top:-100,right:-80,animation:"pulse 6s ease-in-out infinite"}}/>
       <div style={{position:"absolute",width:180,height:180,borderRadius:"50%",background:"#fff",opacity:0.07,bottom:80,left:-50,animation:"pulse 6s 2s ease-in-out infinite"}}/>
-
+      <div/>
       <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:28,zIndex:2}}>
         <div style={{width:110,height:110,borderRadius:32,background:"rgba(255,255,255,0.15)",backdropFilter:"blur(12px)",border:"1.5px solid rgba(255,255,255,0.3)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 8px 40px rgba(0,0,0,0.2)",animation:"scaleIn 0.6s cubic-bezier(0.34,1.56,0.64,1)"}}>
           <svg width="54" height="54" viewBox="0 0 52 52" fill="none"><path d="M10 42 L44 8 L38 30 L24 32 Z" fill="white" opacity="0.95"/><path d="M44 8 L38 30 L32 20 Z" fill="white" opacity="0.4"/><path d="M24 32 L10 42 L18 36 Z" fill="white" opacity="0.5"/><circle cx="44" cy="8" r="2.5" fill="white" opacity="0.9"/></svg>
@@ -257,15 +270,30 @@ function Splash({onDone}) {
           <h1 style={{fontSize:36,fontWeight:700,color:"#fff",margin:0}}>BulletinBoard</h1>
           <p style={{fontSize:13,color:"rgba(255,255,255,0.6)",marginTop:6,letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:600}}>For Schools & Institutions</p>
         </div>
-        <p style={{fontSize:17,color:"rgba(255,255,255,0.88)",lineHeight:1.65,fontStyle:"italic",textAlign:"center",maxWidth:280,animation:"floatUp 0.5s ease"}}>"One voice from every staff member.<br/>One response from leadership."</p>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center",animation:"floatUp 0.5s ease"}}>
+        {step>=2&&<p style={{fontSize:17,color:"rgba(255,255,255,0.88)",lineHeight:1.65,fontStyle:"italic",textAlign:"center",maxWidth:280,animation:"floatUp 0.5s ease"}}>"One voice from every staff member.<br/>One response from leadership."</p>}
+        {step>=2&&<div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center",animation:"floatUp 0.5s ease"}}>
           {["💡 Suggestions","📢 Announcements","❓ Questions"].map(l=><span key={l} style={{fontSize:12,fontWeight:600,color:"rgba(255,255,255,0.9)",background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:20,padding:"5px 13px"}}>{l}</span>)}
-        </div>
+        </div>}
       </div>
 
-      {/* Loading dots */}
-      <div style={{position:"absolute",bottom:60,display:"flex",gap:8}}>
-        {[0,1,2].map(i=><div key={i} style={{width:8,height:8,borderRadius:"50%",background:"rgba(255,255,255,0.6)",animation:`pulse 1.2s ${i*0.2}s ease-in-out infinite`}}/>)}
+      {/* Bottom — different for first time vs returning */}
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:14,zIndex:2,width:"100%",maxWidth:360}}>
+        {!isReturning && step>=3 ? (
+          <>
+            <button onClick={handleGetStarted} style={{width:"100%",padding:"16px 24px",background:"#fff",color:"#065f46",border:"none",borderRadius:16,fontSize:16,fontWeight:700,cursor:"pointer",boxShadow:"0 6px 24px rgba(0,0,0,0.18)",animation:"floatUp 0.5s ease"}}>
+              Get Started →
+            </button>
+            <div style={{width:"100%",padding:"12px 16px",background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:14,animation:"floatUp 0.5s ease"}}>
+              <p style={{fontSize:12,color:"rgba(255,255,255,0.75)",textAlign:"center",lineHeight:1.6,margin:0}}>📲 <strong>Install:</strong> tap Share → <span style={{color:"#fff"}}>"Add to Home Screen"</span></p>
+            </div>
+            <p style={{fontSize:11,color:"rgba(255,255,255,0.4)",textAlign:"center"}}>By continuing you agree to our Terms & Privacy Policy</p>
+          </>
+        ) : (
+          /* Returning user — just show loading dots */
+          <div style={{display:"flex",gap:8}}>
+            {[0,1,2].map(i=><div key={i} style={{width:8,height:8,borderRadius:"50%",background:"rgba(255,255,255,0.6)",animation:`pulse 1.2s ${i*0.2}s ease-in-out infinite`}}/>)}
+          </div>
+        )}
       </div>
     </div>
   );
