@@ -301,18 +301,74 @@ function Splash({onDone}) {
 
 // ── LOGIN ─────────────────────────────────────────────────────────────────────
 function Login({onLogin}) {
-  const [phone,setPhone]=useState(""); const [country,setCountry]=useState({code:"+256",flag:"🇺🇬"});
-  const [ddOpen,setDdOpen]=useState(false); const [focused,setFocused]=useState(false);
-  const [checking,setChecking]=useState(false); const [notFound,setNotFound]=useState(false);
+  const [phone,     setPhone]     = useState("");
+  const [country,   setCountry]   = useState({code:"+256",flag:"🇺🇬"});
+  const [ddOpen,    setDdOpen]    = useState(false);
+  const [focused,   setFocused]   = useState(false);
+  const [sending,   setSending]   = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [otpSent,   setOtpSent]   = useState(false);
+  const [otp,       setOtp]       = useState(["","","","","",""]);
+  const [error,     setError]     = useState("");
+  const otpRefs = Array.from({length:6}, () => useRef(null));
+
   const COUNTRIES=[{code:"+256",flag:"🇺🇬",name:"Uganda"},{code:"+233",flag:"🇬🇭",name:"Ghana"},{code:"+254",flag:"🇰🇪",name:"Kenya"},{code:"+255",flag:"🇹🇿",name:"Tanzania"},{code:"+44",flag:"🇬🇧",name:"UK"},{code:"+1",flag:"🇺🇸",name:"USA"}];
-  const valid = phone.replace(/\s/g,"").length>=7;
-  async function submit() {
-    setChecking(true); setNotFound(false); await new Promise(r=>setTimeout(r,1400)); setChecking(false);
-    if(phone.replace(/\s/g,"")==="0000") { setNotFound(true); return; }
-    onLogin(STAFF_USERS[0]);
+  const fullPhone = `${country.code}${phone.replace(/\s/g,"")}`;
+  const phoneValid = phone.replace(/\s/g,"").length >= 7;
+  const otpFilled = otp.every(d => d !== "");
+
+  async function sendOTP() {
+    if(!phoneValid) return;
+    setSending(true); setError("");
+    try {
+      const { data, error } = await supabase.functions.invoke("send-otp", {
+        body: { phone: fullPhone }
+      });
+      if(error) throw error;
+      setOtpSent(true);
+    } catch(e) {
+      setError("Failed to send code. Please check your number and try again.");
+    }
+    setSending(false);
   }
+
+  async function verifyOTP() {
+    if(!otpFilled) return;
+    setVerifying(true); setError("");
+    try {
+      const { data, error } = await supabase.functions.invoke("verify-otp", {
+        body: { phone: fullPhone, code: otp.join("") }
+      });
+      if(error) throw error;
+      if(!data.success) { setError(data.error || "Invalid code"); setVerifying(false); return; }
+      localStorage.setItem("bb_user", JSON.stringify(data.user));
+      onLogin(data.user);
+    } catch(e) {
+      setError("Invalid or expired code. Please try again.");
+    }
+    setVerifying(false);
+  }
+
+  function handleOtpInput(i, val) {
+    if(val.length > 1) {
+      const digits = val.replace(/\D/g,"").slice(0,6).split("");
+      const next = [...otp];
+      digits.forEach((d,idx) => { if(idx<6) next[idx]=d; });
+      setOtp(next);
+      otpRefs[Math.min(digits.length,5)]?.current?.focus();
+      return;
+    }
+    if(!/^\d?$/.test(val)) return;
+    const next = [...otp]; next[i] = val; setOtp(next);
+    if(val && i<5) otpRefs[i+1]?.current?.focus();
+  }
+
+  function handleOtpKey(i, e) {
+    if(e.key==="Backspace" && !otp[i] && i>0) otpRefs[i-1]?.current?.focus();
+  }
+
   return (
-    <div style={{minHeight:"100vh",background:T.bg,display:"flex",flexDirection:"column"}}>
+    <div style={{minHeight:"100vh",background:T.bg,display:"flex",flexDirection:"column"}}> 
       <div style={{background:`linear-gradient(135deg,${T.primaryLight},${T.primary})`,padding:"44px 24px 56px",display:"flex",flexDirection:"column",alignItems:"center",gap:16,position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",width:220,height:220,borderRadius:"50%",background:"rgba(255,255,255,0.06)",top:-70,right:-60}}/>
         <div style={{width:80,height:80,borderRadius:22,background:"rgba(255,255,255,0.2)",border:"2.5px solid rgba(255,255,255,0.35)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,zIndex:1}}>🏫</div>
@@ -321,28 +377,14 @@ function Login({onLogin}) {
           <p style={{fontSize:14,color:"rgba(255,255,255,0.75)",margin:"5px 0 0"}}>Staff Bulletin Board</p>
         </div>
       </div>
+
       <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",padding:"0 20px 40px",marginTop:-24}}>
         <div style={{background:T.surface,borderRadius:24,padding:"28px 24px",border:`1px solid ${T.border}`,boxShadow:"0 4px 32px #06403812",width:"100%",maxWidth:420}}>
-          {checking?(
-            <div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"24px 0",gap:14}}>
-              <div style={{width:48,height:48,borderRadius:"50%",border:`3px solid ${T.primaryLight}`,borderTopColor:"transparent",animation:"spin 0.8s linear infinite"}}/>
-              <p style={{fontSize:14,fontWeight:600,color:T.textMid}}>Checking your number…</p>
-            </div>
-          ):notFound?(
-            <div style={{textAlign:"center"}}>
-              <div style={{fontSize:48,marginBottom:12}}>🔍</div>
-              <h3 style={{fontSize:18,fontWeight:700,color:T.textDark,marginBottom:8}}>Number not recognised</h3>
-              <p style={{fontSize:13,color:T.textMute,lineHeight:1.7,marginBottom:14}}>This number isn't registered on this board.</p>
-              <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:12,padding:"14px",marginBottom:18,textAlign:"left"}}>
-                <p style={{fontSize:13,fontWeight:700,color:"#92400e",marginBottom:6}}>📋 What to do:</p>
-                <p style={{fontSize:13,color:"#78350f",lineHeight:1.7,margin:0}}>Ask your administrator for an <strong>invite link</strong> to register and access the board.</p>
-              </div>
-              <button onClick={()=>{setNotFound(false);setPhone("");}} style={{width:"100%",padding:"13px",background:`linear-gradient(135deg,${T.primaryLight},${T.primary})`,color:"#fff",border:"none",borderRadius:12,fontSize:14,fontWeight:700,cursor:"pointer"}}>← Try Again</button>
-            </div>
-          ):(
+
+          {!otpSent ? (
             <>
               <h3 style={{fontSize:18,fontWeight:700,color:T.textDark,margin:"0 0 6px"}}>Enter your number</h3>
-              <p style={{fontSize:13,color:T.textMute,marginBottom:22,lineHeight:1.65}}>Enter your registered WhatsApp number to sign in.</p>
+              <p style={{fontSize:13,color:T.textMute,marginBottom:22,lineHeight:1.65}}>Enter your registered WhatsApp number. We'll send you a verification code.</p>
               <label style={{fontSize:11,fontWeight:700,color:T.textMid,textTransform:"uppercase",letterSpacing:"0.07em",display:"block",marginBottom:8}}>WhatsApp Number</label>
               <div style={{display:"flex",gap:8,marginBottom:20}}>
                 <div style={{position:"relative",flexShrink:0}}>
@@ -356,14 +398,38 @@ function Login({onLogin}) {
                     </button>)}
                   </div>}
                 </div>
-                <input type="tel" placeholder="7X XXX XXXX" value={phone} onChange={e=>setPhone(e.target.value)} onFocus={()=>setFocused(true)} onBlur={()=>setFocused(false)} onKeyDown={e=>e.key==="Enter"&&valid&&submit()} style={{flex:1,borderRadius:12,padding:"13px 16px",fontSize:15,color:T.textDark,background:"#f9fffe",boxSizing:"border-box",outline:"none",border:focused?`1.5px solid ${T.primaryLight}`:`1.5px solid ${T.border}`,boxShadow:focused?`0 0 0 3px ${T.primaryGlow}`:"none",transition:"all 0.2s"}}/>
+                <input type="tel" placeholder="7X XXX XXXX" value={phone} onChange={e=>setPhone(e.target.value)} onFocus={()=>setFocused(true)} onBlur={()=>setFocused(false)} onKeyDown={e=>e.key==="Enter"&&phoneValid&&sendOTP()} style={{flex:1,borderRadius:12,padding:"13px 16px",fontSize:15,color:T.textDark,background:"#f9fffe",boxSizing:"border-box",outline:"none",border:focused?`1.5px solid ${T.primaryLight}`:`1.5px solid ${T.border}`,boxShadow:focused?`0 0 0 3px ${T.primaryGlow}`:"none",transition:"all 0.2s"}}/>
               </div>
-              <button onClick={submit} disabled={!valid} style={{width:"100%",padding:"15px",background:valid?`linear-gradient(135deg,${T.primaryLight},${T.primary})`:T.bg,color:valid?"#fff":T.textFaint,border:"none",borderRadius:14,fontSize:15,fontWeight:700,cursor:valid?"pointer":"not-allowed",boxShadow:valid?`0 4px 20px ${T.primaryGlow}`:"none",transition:"all 0.2s",marginBottom:14}}>Sign In →</button>
-              <p style={{fontSize:12,color:T.textFaint,textAlign:"center",lineHeight:1.6}}>💡 Demo: any number → Paul's account · type <strong style={{color:T.primaryLight}}>0000</strong> for not found</p>
+              {error&&<p style={{fontSize:13,color:"#e85d3a",marginBottom:14,fontWeight:600}}>{error}</p>}
+              <button onClick={sendOTP} disabled={!phoneValid||sending} style={{width:"100%",padding:"15px",background:phoneValid?`linear-gradient(135deg,${T.primaryLight},${T.primary})`:T.bg,color:phoneValid?"#fff":T.textFaint,border:"none",borderRadius:14,fontSize:15,fontWeight:700,cursor:phoneValid?"pointer":"not-allowed",boxShadow:phoneValid?`0 4px 20px ${T.primaryGlow}`:"none",transition:"all 0.2s",marginBottom:14}}>
+                {sending?"Sending code…":"Send WhatsApp Code →"}
+              </button>
+            </>
+          ) : (
+            <>
+              <div style={{textAlign:"center",marginBottom:20}}>
+                <div style={{fontSize:44,marginBottom:10}}>💬</div>
+                <h3 style={{fontSize:18,fontWeight:700,color:T.textDark,margin:"0 0 6px"}}>Check your WhatsApp</h3>
+                <p style={{fontSize:13,color:T.textMute,lineHeight:1.65}}>We sent a 6-digit code to<br/><strong style={{color:T.primary}}>{fullPhone}</strong></p>
+              </div>
+              <div style={{display:"flex",gap:8,justifyContent:"center",marginBottom:16}}>
+                {otp.map((d,i)=>(
+                  <input key={i} ref={otpRefs[i]} type="tel" maxLength={6} value={d}
+                    onChange={e=>handleOtpInput(i,e.target.value)}
+                    onKeyDown={e=>handleOtpKey(i,e)}
+                    style={{width:46,height:56,textAlign:"center",fontSize:22,fontWeight:700,borderRadius:12,outline:"none",border:d?`1.5px solid ${T.primaryLight}`:`1.5px solid ${T.border}`,background:d?"#f0fdf4":"#f9fffe",color:T.textDark,transition:"all 0.15s"}}
+                  />
+                ))}
+              </div>
+              {error&&<p style={{fontSize:13,color:"#e85d3a",marginBottom:14,fontWeight:600,textAlign:"center"}}>{error}</p>}
+              <button onClick={verifyOTP} disabled={!otpFilled||verifying} style={{width:"100%",padding:"15px",background:otpFilled?`linear-gradient(135deg,${T.primaryLight},${T.primary})`:T.bg,color:otpFilled?"#fff":T.textFaint,border:"none",borderRadius:14,fontSize:15,fontWeight:700,cursor:otpFilled?"pointer":"not-allowed",boxShadow:otpFilled?`0 4px 20px ${T.primaryGlow}`:"none",transition:"all 0.2s",marginBottom:16}}>
+                {verifying?"Verifying…":"Verify Code →"}
+              </button>
+              <button onClick={()=>{setOtpSent(false);setOtp(["","","","","",""]);setError("");}} style={{width:"100%",padding:"12px",background:T.bg,color:T.textMid,border:`1px solid ${T.border}`,borderRadius:12,fontSize:13,fontWeight:600,cursor:"pointer"}}>← Use a different number</button>
             </>
           )}
         </div>
-        <button onClick={()=>onLogin(ADMIN_USER)} style={{marginTop:14,fontSize:13,color:T.primaryLight,background:"none",border:"none",cursor:"pointer",fontWeight:600,textDecoration:"underline"}}>Sign in as Administrator →</button>
+        <button onClick={()=>onLogin(ADMIN_USER)} style={{marginTop:14,fontSize:13,color:T.primaryLight,background:"none",border:"none",cursor:"pointer",fontWeight:600,textDecoration:"underline"}}>Demo: Sign in as Administrator →</button>
       </div>
     </div>
   );
