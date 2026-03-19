@@ -1177,6 +1177,42 @@ useEffect(() => {
     }
     loadAnnouncements();
   }, []);
+useEffect(() => {
+    async function loadCycles() {
+      const { data, error } = await supabase
+        .from('cycles')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if(error) { console.error(error); return; }
+      const active = data.find(c => c.status === 'open');
+      const past   = data.filter(c => c.status === 'closed');
+      if(active) {
+        setActiveCycle({
+          id: active.id,
+          title: active.title,
+          type: active.type,
+          openTime: active.open_time || "07:00",
+          closeTime: active.close_time || "16:00",
+          days: active.days || [],
+          startDate: active.start_date || "",
+          endDate: active.end_date || "",
+          status: active.status,
+          posts: 0, replied: 0, staff: 7,
+          createdAt: new Date(active.created_at).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}),
+        });
+      } else {
+        setActiveCycle(null);
+      }
+      setPastCycles(past.map(c => ({
+        id: c.id,
+        title: c.title,
+        type: c.type,
+        period: `${new Date(c.created_at).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})} – ${c.ended_at ? new Date(c.ended_at).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}) : "ongoing"}`,
+        posts: 0, replied: 0, staff: 7, participation: 0,
+      })));
+    }
+    loadCycles();
+  }, []);
   function handleLogin(user) { setCurrentUser(user); setAppState("app"); setActiveTab(user.isAdmin?"dashboard":"board"); }
   function handleLogout() { setCurrentUser(null); setAppState("splash"); setActiveTab("board"); setSubScreen(null); }
 
