@@ -1215,6 +1215,15 @@ function Profile({currentUser,posts,onLogout,onSchoolSetup}) {
 export default function App() {
   const [appState, setAppState] = useState("splash");
   const [sessionUser, setSessionUser] = useState(null);
+useEffect(() => {
+  const saved = localStorage.getItem("bb_user");
+  if(saved) {
+    const user = JSON.parse(saved);
+    setCurrentUser(user);
+    setAppState("app");
+    setActiveTab(user.isAdmin?"dashboard":"board");
+  }
+}, []);
   const [currentUser,   setCurrentUser]   = useState(null);
   const [activeTab,     setActiveTab]     = useState("board");
   const [subScreen,     setSubScreen]     = useState(null); // "read_receipts" | "school_setup"
