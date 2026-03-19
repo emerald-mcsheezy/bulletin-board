@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-
+import { supabase } from './supabase.js'
 // ── THEME ─────────────────────────────────────────────────────────────────────
 const T = {
   primary:"#065f46", primaryMid:"#047857", primaryLight:"#059669",
@@ -469,16 +469,31 @@ function AdminPostForm({ posts, setPosts, addNotif }) {
   const [audioURL, setAudioURL] = useState(null);
   const [posting,  setPosting]  = useState(false);
 
-  async function submit() {
+async function submit() {
     if(mode==="text"&&(!title.trim()||!content.trim())) return;
     if(mode==="audio"&&(!title.trim()||!audioURL)) return;
     setPosting(true);
-    await new Promise(r=>setTimeout(r,600));
+    const { data, error } = await supabase
+      .from('posts')
+      .insert([{
+        author_id: "admin",
+        author_name: "Mrs. Harriet Nannyondo",
+        author_role: "Head Administrator",
+        author_avatar: "HN",
+        is_admin: true,
+        category,
+        title,
+        content: mode==="audio" ? "🎙️ Audio message" : content,
+        audio_url: mode==="audio" ? audioURL : null,
+      }])
+      .select()
+      .single();
+    if(error) { console.error(error); setPosting(false); return; }
     const p = {
-      id:`p${Date.now()}`, authorId:"admin", category, title,
-      content: mode==="audio" ? "🎙️ Audio message" : content,
-      audioURL: mode==="audio" ? audioURL : null,
-      timestamp:new Date(), adminReply:null, isAdminPost:true,
+      id: data.id, authorId: data.author_id, category: data.category,
+      title: data.title, content: data.content,
+      audioURL: data.audio_url, timestamp: new Date(data.created_at),
+      adminReply: null, isAdminPost: true,
     };
     setPosts(prev=>[p,...prev]);
     addNotif({type:"new_post",title:`Mrs. Nannyondo posted: "${title}"`,body:mode==="audio"?"The administrator sent an audio message.":content.slice(0,80)});
@@ -540,21 +555,57 @@ function Board({currentUser,posts,setPosts,announcements,activeCycle,addNotif}) 
   const pinned=announcements.filter(a=>a.pinned);
   const displayed=posts.filter(p=>filter==="all"?true:filter==="pending"?!p.adminReply:!!p.adminReply).filter(p=>catFilter==="all"?true:p.category===catFilter);
 
-  function doPost() {
+async function doPost() {
     if(!title.trim()||!content.trim()) return;
-    const p={id:`p${Date.now()}`,authorId:currentUser.id,category,title,content,timestamp:new Date(),adminReply:null};
+    const { data, error } = await supabase
+      .from('posts')
+      .insert([{
+        author_id: currentUser.id,
+        author_name: currentUser.name,
+        author_role: currentUser.role,
+        author_avatar: currentUser.avatar,
+        is_admin: currentUser.isAdmin,
+        category,
+        title,
+        content,
+      }])
+      .select()
+      .single();
+    if(error) { console.error(error); return; }
+    const p = {
+      id: data.id, authorId: data.author_id, category: data.category,
+      title: data.title, content: data.content,
+      timestamp: new Date(data.created_at), adminReply: null
+    };
     setPosts(prev=>[p,...prev]); setNewId(p.id); setTitle(""); setContent(""); setCategory("suggestion");
     addNotif({type:"new_post",title:`New post from ${currentUser.name}`,body:`${currentUser.name} submitted a ${category}: "${title}"`});
   }
-  function doReply(postId) {
+   async function doReply(postId) {
     if(!replyText.trim()) return;
     const post=posts.find(p=>p.id===postId);
+    const { error } = await supabase
+      .from('posts')
+      .update({
+        admin_reply_content: replyText,
+        admin_reply_at: new Date().toISOString(),
+      })
+      .eq('id', postId);
+    if(error) { console.error(error); return; }
     setPosts(prev=>prev.map(p=>p.id===postId?{...p,adminReply:{content:replyText,timestamp:new Date()}}:p));
     addNotif({type:"reply",title:"Mrs. Nannyondo replied to your post",body:`"${replyText.slice(0,80)}…"`,forUser:post.authorId});
     setReplyOpen(null); setReplyText(""); setReplyMode("text");
   }
-  function doReplyAudio(postId, audioURL) {
+async function doReplyAudio(postId, audioURL) {
     const post=posts.find(p=>p.id===postId);
+    const { error } = await supabase
+      .from('posts')
+      .update({
+        admin_reply_content: "🎙️ Audio reply",
+        admin_reply_audio: audioURL,
+        admin_reply_at: new Date().toISOString(),
+      })
+      .eq('id', postId);
+    if(error) { console.error(error); return; }
     setPosts(prev=>prev.map(p=>p.id===postId?{...p,adminReply:{content:"🎙️ Audio reply",audioURL,timestamp:new Date()}}:p));
     addNotif({type:"reply",title:"Mrs. Nannyondo sent you an audio reply",body:"Tap to listen to the administrator's response.",forUser:post.authorId});
   }
@@ -699,15 +750,35 @@ function Board({currentUser,posts,setPosts,announcements,activeCycle,addNotif}) 
 // ── ANNOUNCEMENTS ─────────────────────────────────────────────────────────────
 function Announcements({currentUser,announcements,setAnnouncements,addNotif}) {
   const [showForm,setShowForm]=useState(false); const [title,setTitle]=useState(""); const [body,setBody]=useState(""); const [priority,setPriority]=useState("normal"); const [pinIt,setPinIt]=useState(true); const [newId,setNewId]=useState(null);
-  function post() {
+  async function post() {
     if(!title.trim()||!body.trim()) return;
-    const id=`an${Date.now()}`;
-    setAnnouncements(prev=>[{id,priority,title,body,postedAt:"Just now",pinned:pinIt,views:0},...prev]);
-    setNewId(id); setShowForm(false); setTitle(""); setBody(""); setPriority("normal"); setPinIt(true);
+    const { data, error } = await supabase
+      .from('announcements')
+      .insert([{
+        priority,
+        title,
+        body,
+        pinned: pinIt,
+      }])
+      .select()
+      .single();
+    if(error) { console.error(error); return; }
+    const an = {
+      id: data.id, priority: data.priority,
+      title: data.title, body: data.body,
+      pinned: data.pinned, postedAt: "Just now", views: 0,
+    };
+    setAnnouncements(prev=>[an,...prev]);
+    setNewId(data.id); setShowForm(false); setTitle(""); setBody(""); setPriority("normal"); setPinIt(true);
     addNotif({type:"announcement",title:`New announcement: ${title}`,body:`Mrs. Nannyondo posted: "${body.slice(0,60)}…"`});
   }
-  function togglePin(id) {
+async function togglePin(id) {
     const ann=announcements.find(a=>a.id===id);
+    const { error } = await supabase
+      .from('announcements')
+      .update({ pinned: !ann.pinned })
+      .eq('id', id);
+    if(error) { console.error(error); return; }
     setAnnouncements(prev=>prev.map(a=>a.id===id?{...a,pinned:!a.pinned}:a));
     addNotif({type:"pin",title:`Announcement ${ann?.pinned?"unpinned":"pinned"}`,body:`"${ann?.title}" was ${ann?.pinned?"unpinned":"pinned"}.`});
   }
@@ -734,7 +805,7 @@ function Announcements({currentUser,announcements,setAnnouncements,addNotif}) {
             {currentUser.isAdmin&&(
               <div style={{display:"flex",gap:8,marginTop:8}}>
                 <button onClick={()=>togglePin(an.id)} style={{fontSize:12,fontWeight:600,color:an.pinned?T.textMute:T.primaryMid,background:an.pinned?T.bg:T.accentLight,border:`1px solid ${an.pinned?T.border:T.accentBorder}`,borderRadius:8,padding:"5px 12px",cursor:"pointer"}}>{an.pinned?"📌 Unpin":"📌 Pin"}</button>
-                <button onClick={()=>setAnnouncements(prev=>prev.filter(a=>a.id!==an.id))} style={{fontSize:12,fontWeight:600,color:"#e85d3a",background:"#fff1f0",border:"1px solid #fecaca",borderRadius:8,padding:"5px 12px",cursor:"pointer"}}>Delete</button>
+        <button onClick={async()=>{ await supabase.from('announcements').delete().eq('id',an.id); setAnnouncements(prev=>prev.filter(a=>a.id!==an.id)); }}style={{fontSize:12,fontWeight:600,color:"#e85d3a",background:"#fff1f0",border:"1px solid #fecaca",borderRadius:8,padding:"5px 12px",cursor:"pointer"}}>Delete</button>
               </div>
             )}
           </div>
@@ -1025,8 +1096,8 @@ export default function App() {
   const [currentUser,   setCurrentUser]   = useState(null);
   const [activeTab,     setActiveTab]     = useState("board");
   const [subScreen,     setSubScreen]     = useState(null); // "read_receipts" | "school_setup"
-  const [posts,         setPosts]         = useState(INIT_POSTS);
-  const [announcements, setAnnouncements] = useState(INIT_ANNOUNCEMENTS);
+  const [posts, setPosts] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
   const [notifs,        setNotifs]        = useState(INIT_NOTIFS);
   const [activeCycle,   setActiveCycle]   = useState(INIT_CYCLE);
   const [pastCycles,    setPastCycles]    = useState(INIT_PAST_CYCLES);
@@ -1035,6 +1106,49 @@ export default function App() {
 
   function showToast(msg) { setToast(msg); setTimeout(()=>setToast(null),3000); }
   function addNotif(n) { setNotifs(prev=>[{id:`n${Date.now()}`,...n,read:false,time:"Just now"},...prev]); }
+useEffect(() => {
+    async function loadPosts() {
+      const { data, error } = await supabase
+        .from('posts')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if(error) { console.error(error); return; }
+      setPosts(data.map(p => ({
+        id: p.id,
+        authorId: p.author_id,
+        category: p.category,
+        title: p.title,
+        content: p.content,
+        audioURL: p.audio_url,
+        timestamp: new Date(p.created_at),
+        adminReply: p.admin_reply_content ? {
+          content: p.admin_reply_content,
+          audioURL: p.admin_reply_audio,
+          timestamp: new Date(p.admin_reply_at)
+        } : null
+      })));
+    }
+    loadPosts();
+  }, []);
+useEffect(() => {
+    async function loadAnnouncements() {
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .order('posted_at', { ascending: false });
+      if(error) { console.error(error); return; }
+      setAnnouncements(data.map(a => ({
+        id: a.id,
+        priority: a.priority,
+        title: a.title,
+        body: a.body,
+        pinned: a.pinned,
+        postedAt: new Date(a.posted_at).toLocaleDateString(),
+        views: 0,
+      })));
+    }
+    loadAnnouncements();
+  }, []);
   function handleLogin(user) { setCurrentUser(user); setAppState("app"); setActiveTab(user.isAdmin?"dashboard":"board"); }
   function handleLogout() { setCurrentUser(null); setAppState("splash"); setActiveTab("board"); setSubScreen(null); }
 
