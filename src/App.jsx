@@ -843,9 +843,37 @@ function Cycles({activeCycle,setActiveCycle,pastCycles,setPastCycles,addNotif}) 
   const [cTitle,setCTitle]=useState(""); const [cType,setCType]=useState("daily"); const [openTime,setOpenTime]=useState("07:00"); const [closeTime,setCloseTime]=useState("16:00"); const [selDays,setSelDays]=useState([]); const [startDate,setStartDate]=useState(""); const [endDate,setEndDate]=useState(""); const [ff,setFf]=useState(null);
   function desc(c){if(!c)return"";if(c.type==="daily")return`Every day · ${c.openTime}–${c.closeTime}`;if(c.type==="weekday")return`Every ${(c.days||[]).join(", ")} · All day`;if(c.type==="fullweek")return"Mon–Sun · All day";if(c.type==="custom")return`${c.startDate}→${c.endDate}`;return"";}
   function canCreate(){if(!cTitle.trim())return false;if(cType==="daily")return openTime&&closeTime;if(cType==="weekday")return selDays.length>0;if(cType==="fullweek")return true;if(cType==="custom")return startDate&&endDate;return false;}
-  function create(){if(!canCreate())return;const now=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});setActiveCycle({id:`c${Date.now()}`,title:cTitle,type:cType,openTime,closeTime,days:selDays,startDate,endDate,posts:0,replied:0,staff:7,status:"open",createdAt:now});setShowNew(false);setCTitle("");setCType("daily");setOpenTime("07:00");setCloseTime("16:00");setSelDays([]);setStartDate("");setEndDate("");addNotif({type:"cycle_open",title:`${cTitle} is now open`,body:"The bulletin cycle has started. You can now post your suggestions, announcements and questions."});}
-  function end(openNew=false){const now=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});setPastCycles(p=>[{...activeCycle,status:"closed",period:`${activeCycle.createdAt}–${now}`,participation:Math.round((activeCycle.posts/activeCycle.staff)*100)},...p]);setActiveCycle(null);setShowClose(false);addNotif({type:"cycle_close",title:"Bulletin cycle has ended",body:"Posting is now closed. All posts and replies remain visible."});if(openNew)setTimeout(()=>setShowNew(true),400);}
-  function nudgeOne(id){setNudged(p=>[...p,id]);const m=STAFF_USERS.find(s=>s.id===id);addNotif({type:"nudge",title:`Reminder sent to ${m?.name}`,body:"\"The bulletin cycle is still open — don't forget to post!\""});}
+  async function create(){
+    if(!canCreate())return;
+    const { data, error } = await supabase
+      .from('cycles')
+      .insert([{
+        title: cTitle, type: cType,
+        open_time: openTime, close_time: closeTime,
+        days: selDays, start_date: startDate, end_date: endDate,
+        status: 'open',
+      }])
+      .select().single();
+    if(error){ console.error(error); return; }
+    const now = new Date(data.created_at).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
+    setActiveCycle({id:data.id,title:data.title,type:data.type,openTime:data.open_time,closeTime:data.close_time,days:data.days||[],startDate:data.start_date,endDate:data.end_date,posts:0,replied:0,staff:7,status:"open",createdAt:now});
+    setShowNew(false);setCTitle("");setCType("daily");setOpenTime("07:00");setCloseTime("16:00");setSelDays([]);setStartDate("");setEndDate("");
+    addNotif({type:"cycle_open",title:`${cTitle} is now open`,body:"The bulletin cycle has started. You can now post your suggestions, announcements and questions."});
+  }
+async function end(openNew=false){
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from('cycles')
+      .update({ status:'closed', ended_at: now })
+      .eq('id', activeCycle.id);
+    if(error){ console.error(error); return; }
+    const endStr = new Date(now).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
+    setPastCycles(p=>[{...activeCycle,status:"closed",period:`${activeCycle.createdAt}–${endStr}`,participation:Math.round((activeCycle.posts/activeCycle.staff)*100)},...p]);
+    setActiveCycle(null);setShowClose(false);
+    addNotif({type:"cycle_close",title:"Bulletin cycle has ended",body:"Posting is now closed. All posts and replies remain visible."});
+    if(openNew)setTimeout(()=>setShowNew(true),400);
+  }
+    function nudgeOne(id){setNudged(p=>[...p,id]);const m=STAFF_USERS.find(s=>s.id===id);addNotif({type:"nudge",title:`Reminder sent to ${m?.name}`,body:"\"The bulletin cycle is still open — don't forget to post!\""});}
   function nudgeAll(){STAFF_USERS.filter(s=>!nudged.includes(s.id)).forEach(s=>nudgeOne(s.id));setShowNudge(false);}
   const inp=(f)=>({width:"100%",borderRadius:12,padding:"11px 14px",fontSize:14,color:T.textDark,background:"#f9fffe",boxSizing:"border-box",outline:"none",border:ff===f?`1.5px solid ${T.primaryLight}`:`1.5px solid ${T.border}`,boxShadow:ff===f?`0 0 0 3px ${T.primaryGlow}`:"none",transition:"all 0.2s"});
   const lbl={fontSize:11,fontWeight:700,color:T.textMid,textTransform:"uppercase",letterSpacing:"0.07em",display:"block",marginBottom:7};
@@ -1099,8 +1127,8 @@ export default function App() {
   const [posts, setPosts] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [notifs,        setNotifs]        = useState(INIT_NOTIFS);
-  const [activeCycle,   setActiveCycle]   = useState(INIT_CYCLE);
-  const [pastCycles,    setPastCycles]    = useState(INIT_PAST_CYCLES);
+  const [activeCycle, setActiveCycle] = useState(null);
+  const [pastCycles, setPastCycles] = useState([]);
   const [school,        setSchool]        = useState(SCHOOL_DEFAULT);
   const [toast,         setToast]         = useState(null);
 
