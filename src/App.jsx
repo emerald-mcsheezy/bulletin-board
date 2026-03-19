@@ -1307,7 +1307,12 @@ useEffect(() => {
     }
     loadCycles();
   }, []);
-  function handleLogin(user) { setCurrentUser(user); setAppState("app"); setActiveTab(user.isAdmin?"dashboard":"board"); }
+  function handleLogin(user) {
+  localStorage.setItem("bb_user", JSON.stringify(user));
+  setCurrentUser(user);
+  setAppState("app");
+  setActiveTab(user.isAdmin?"dashboard":"board");
+} 
   function handleLogout() { setCurrentUser(null); setAppState("splash"); setActiveTab("board"); setSubScreen(null); setTimeout(()=>setAppState("login"),2500); }
 
   const unreadCount = notifs.filter(n=>!n.read).length;
